@@ -3,8 +3,8 @@
   "gpu_id": "0,1,2,3",
 
   "train_filepath": "./data/tsp100_train_concorde.txt",
-  "val_filepath": "./data/tsp100_val_concorde.txt",
-  "test_filepath": "./data/tsp100_test_concorde.txt",
+  "val_filepath": "./data/tsp100_box_constraint_240710.txt",
+  "test_filepath": "./data/tsp100_box_constraint_240710.txt",
 
   "num_nodes": 100,
   "num_neighbors": 20,

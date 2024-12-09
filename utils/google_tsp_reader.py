@@ -31,7 +31,11 @@ class GoogleTSPReader(object):
         self.num_neighbors = num_neighbors
         self.batch_size = batch_size
         self.filepath = filepath
-        self.filedata = shuffle(open(filepath, "r").readlines())  # Always shuffle upon reading data
+        # self.filedata = shuffle(open(filepath, "r").readlines())  # Always shuffle upon reading data
+        self.filedata = open(filepath, "r").readlines()
+        self.constraint_type = self.filepath.split('_')[1]
+        if self.constraint_type == 'test':
+            self.constraint_type = 'basic'
         self.max_iter = (len(self.filedata) // batch_size)
 
     def __iter__(self):
@@ -51,7 +55,10 @@ class GoogleTSPReader(object):
         batch_nodes_coord = []
         batch_tour_nodes = []
         batch_tour_len = []
-
+        batch_points = []
+        batch_gt_tour = []
+        batch_constraint = []
+        
         for line_num, line in enumerate(lines):
             line = line.split(" ")  # Split into list
             
@@ -80,7 +87,22 @@ class GoogleTSPReader(object):
             
             # Convert tour nodes to required format
             # Don't add final connection for tour/cycle
-            tour_nodes = [int(node) - 1 for node in line[line.index('output') + 1:-1]][:-1]
+            # tour_nodes = [int(node) - 1 for node in line[line.index('output') + 1:-1]][:-1]
+            
+            first_index = line.index('output')
+            if self.constraint_type=='basic':
+                tour_nodes = [int(node) -1 for node in line[first_index + 1:]]
+            else:
+                second_index = line.index('output', first_index + 1)
+                tour_nodes = [int(node) -1 for node in line[first_index + 1:second_index-1]]
+                
+            points = line[:first_index]
+            points = np.array([[float(points[i]), float(points[i+1])] for i in range(0,len(points),2)])
+            gt_tour = line[first_index+1:second_index]
+            gt_tour = np.array([int(t) for t in gt_tour])
+            if self.constraint_type!='basic':
+                constraint = line[second_index+1:-1]
+                constraint = [float(x) for x in constraint]
             
             # Compute node and edge representation of tour + tour_len
             tour_len = 0
@@ -109,6 +131,14 @@ class GoogleTSPReader(object):
             batch_nodes_coord.append(nodes_coord)
             batch_tour_nodes.append(tour_nodes)
             batch_tour_len.append(tour_len)
+            batch_points.append(points)
+            batch_gt_tour.append(gt_tour)
+            if self.constraint_type!='basic':
+                batch_constraint.append(constraint)
+        
+        # if self.constraint_type=='path':
+        #     max_length = max(len(lst) for lst in batch_constraint)
+        #     batch_constraint = [lst + [-1000] * (max_length - len(lst)) for lst in batch_constraint]
         
         # From list to tensors as a DotDict
         batch = DotDict()
@@ -120,4 +150,10 @@ class GoogleTSPReader(object):
         batch.nodes_coord = np.stack(batch_nodes_coord, axis=0)
         batch.tour_nodes = np.stack(batch_tour_nodes, axis=0)
         batch.tour_len = np.stack(batch_tour_len, axis=0)
+        batch.points = np.stack(batch_points, axis=0)
+        batch.gt_tour = np.stack(batch_gt_tour, axis=0)
+        if self.constraint_type == 'box' or self.constraint_type == 'cluster':
+            batch.constraint = np.stack(batch_constraint, axis=0)
+        elif self.constraint_type == 'path':
+            batch.constraint= batch_constraint
         return batch

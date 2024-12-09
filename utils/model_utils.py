@@ -39,14 +39,22 @@ def loss_edges(y_pred_edges, y_edges, edge_cw):
         loss_edges: Value of loss function
     
     """
-    # Edge loss
-    y = F.log_softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-    y = y.permute(0, 3, 1, 2)  # B x voc_edges x V x V
-    loss_edges = nn.NLLLoss(edge_cw)(y, y_edges)
-    return loss_edges
+    
+    if edge_cw is not None and edge_cw.device != y_pred_edges.device:
+        edge_cw = edge_cw.to(y_pred_edges.device)
+
+    # Apply log softmax to the predictions
+    y = F.log_softmax(y_pred_edges, dim=3)  # Apply softmax along the last dimension (voc_edges_out)
+    y = y.permute(0, 3, 1, 2).contiguous()  # Change dimension order and make contiguous
+
+    # Compute the loss using NLLLoss with class weights
+    loss_func = nn.NLLLoss(weight=edge_cw)  # Create the loss function with the class weights
+    loss = loss_func(y, y_edges)  # Compute the loss between the log softmax output and the targets
+    
+    return loss
 
 
-def beamsearch_tour_nodes(y_pred_edges, beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type='raw', random_start=False):
+def beamsearch_tour_nodes(y_pred_edges, beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type='raw', random_start=False, constraint_type = 'basic', constraint = None):
     """
     Performs beamsearch procedure on edge prediction matrices and returns possible TSP tours.
 
@@ -62,30 +70,32 @@ def beamsearch_tour_nodes(y_pred_edges, beam_size, batch_size, num_nodes, dtypeF
     Returns: TSP tours in terms of node ordering (batch_size, num_nodes)
 
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Device configuration
+
+    y_pred_edges = y_pred_edges.to(device).type(dtypeFloat)  # Move y_pred_edges to the correct device and data type
+
     if probs_type == 'raw':
-        # Compute softmax over edge prediction matrix
-        y = F.softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-        # Consider the second dimension only
-        y = y[:, :, :, 1]  # B x V x V
+        y = F.softmax(y_pred_edges, dim=3)  # Apply softmax over the last dimension
+        y = y[:, :, :, 1]  # Consider the second dimension only
     elif probs_type == 'logits':
-        # Compute logits over edge prediction matrix
-        y = F.log_softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-        # Consider the second dimension only
-        y = y[:, :, :, 1]  # B x V x V
-        y[y == 0] = -1e-20  # Set 0s (i.e. log(1)s) to very small negative number
-    # Perform beamsearch
-    beamsearch = Beamsearch(beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type, random_start)
+        y = F.log_softmax(y_pred_edges, dim=3)  # Apply log softmax over the last dimension
+        y = y[:, :, :, 1]  # Consider the second dimension only
+        y[y == 0] = -1e-20  # Set log(1) to very small negative number to avoid -inf
+
+    # Instantiate the Beamsearch class with the device parameter
+    beamsearch = Beamsearch(beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type, random_start, device, constraint_type = constraint_type, constraint = constraint)
+    
     trans_probs = y.gather(1, beamsearch.get_current_state())
     for step in range(num_nodes - 1):
         beamsearch.advance(trans_probs)
         trans_probs = y.gather(1, beamsearch.get_current_state())
-    # Find TSP tour with highest probability among beam_size candidates
-    ends = torch.zeros(batch_size, 1).type(dtypeLong)
+
+    ends = torch.zeros(batch_size, 1, dtype=dtypeLong, device=device)  # Initialize ends on the correct device
     return beamsearch.get_hypothesis(ends)
 
 
 def beamsearch_tour_nodes_shortest(y_pred_edges, x_edges_values, beam_size, batch_size, num_nodes,
-                                   dtypeFloat, dtypeLong, probs_type='raw', random_start=False):
+                                   dtypeFloat, dtypeLong, probs_type='raw', random_start=False, constraint_type='basic', constraint = None):
     """
     Performs beamsearch procedure on edge prediction matrices and returns possible TSP tours.
 
@@ -107,42 +117,44 @@ def beamsearch_tour_nodes_shortest(y_pred_edges, x_edges_values, beam_size, batc
         shortest_tours: TSP tours in terms of node ordering (batch_size, num_nodes)
 
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    y_pred_edges = y_pred_edges.to(device).type(dtypeFloat)
+    x_edges_values = x_edges_values.to(device).type(dtypeFloat)
+
     if probs_type == 'raw':
-        # Compute softmax over edge prediction matrix
-        y = F.softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-        # Consider the second dimension only
-        y = y[:, :, :, 1]  # B x V x V
+        y = F.softmax(y_pred_edges, dim=3)  # Apply softmax over the last dimension
+        y = y[:, :, :, 1]  # Consider the second dimension only
     elif probs_type == 'logits':
-        # Compute logits over edge prediction matrix
-        y = F.log_softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-        # Consider the second dimension only
-        y = y[:, :, :, 1]  # B x V x V
-        y[y == 0] = -1e-20  # Set 0s (i.e. log(1)s) to very small negative number
-    # Perform beamsearch
-    beamsearch = Beamsearch(beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type, random_start)
+        y = F.log_softmax(y_pred_edges, dim=3)  # Apply log softmax over the last dimension
+        y = y[:, :, :, 1]  # Consider the second dimension only
+        y[y == 0] = -1e-20  # Set 0s to very small negative number
+
+    beamsearch = Beamsearch(beam_size, batch_size, num_nodes, dtypeFloat, dtypeLong, probs_type, random_start, device, constraint_type=constraint_type, constraint = constraint)
+
     trans_probs = y.gather(1, beamsearch.get_current_state())
     for step in range(num_nodes - 1):
         beamsearch.advance(trans_probs)
         trans_probs = y.gather(1, beamsearch.get_current_state())
-    # Initially assign shortest_tours as most probable tours i.e. standard beamsearch
-    ends = torch.zeros(batch_size, 1).type(dtypeLong)
+
+    ends = torch.zeros(batch_size, 1, dtype=dtypeLong, device=device)
     shortest_tours = beamsearch.get_hypothesis(ends)
-    # Compute current tour lengths
     shortest_lens = [1e6] * len(shortest_tours)
+
     for idx in range(len(shortest_tours)):
         shortest_lens[idx] = tour_nodes_to_tour_len(shortest_tours[idx].cpu().numpy(),
                                                     x_edges_values[idx].cpu().numpy())
-    # Iterate over all positions in beam (except position 0 --> highest probability)
+
     for pos in range(1, beam_size):
-        ends = pos * torch.ones(batch_size, 1).type(dtypeLong)  # New positions
+        ends = pos * torch.ones(batch_size, 1, dtype=dtypeLong, device=device)
         hyp_tours = beamsearch.get_hypothesis(ends)
+
         for idx in range(len(hyp_tours)):
             hyp_nodes = hyp_tours[idx].cpu().numpy()
             hyp_len = tour_nodes_to_tour_len(hyp_nodes, x_edges_values[idx].cpu().numpy())
-            # Replace tour in shortest_tours if new length is shorter than current best
             if hyp_len < shortest_lens[idx] and is_valid_tour(hyp_nodes, num_nodes):
                 shortest_tours[idx] = hyp_tours[idx]
                 shortest_lens[idx] = hyp_len
+
     return shortest_tours
 
 

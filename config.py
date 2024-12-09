@@ -62,7 +62,7 @@ class Settings(dict):
 def get_default_config():
     """Returns default settings object.
     """
-    return Settings(json.load(open("./configs/default.json")))
+    return Settings(json.load(open("/mnt/home/zuwang/workspace/graph-convnet-tsp/configs/default.json")))
 
 
 def get_config(filepath):

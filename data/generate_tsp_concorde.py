@@ -11,13 +11,15 @@ from concorde.tsp import TSPSolver
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_samples", type=int, default=10000)
-    parser.add_argument("--num_nodes", type=int, default=20)
+    parser.add_argument("--num_nodes", type=int, default=200)
     parser.add_argument("--node_dim", type=int, default=2)
     parser.add_argument("--filename", type=str, default=None)
+    parser.add_argument("--output_dir", type=str, default="/mnt/home/zuwang/workspace/graph-convnet-tsp/data/tsp200/") 
     opts = parser.parse_args()
     
     if opts.filename is None:
         opts.filename = f"tsp{opts.num_nodes}_concorde.txt"
+    final_path = os.path.join(opts.output_dir, opts.filename)
     
     # Pretty print the run args
     pp.pprint(vars(opts))

@@ -1,10 +1,10 @@
 {
   "expt_name": "tsp50",
-  "gpu_id": "2,3",
+  "gpu_id": "0,1,2,3",
 
   "train_filepath": "./data/tsp50_train_concorde.txt",
-  "val_filepath": "./data/tsp50_val_concorde.txt",
-  "test_filepath": "./data/tsp50_test_concorde.txt",
+  "val_filepath": "./data/tsp50_box_constraint_240710.txt",
+  "test_filepath": "./data/tsp50_box_constraint_240710.txt",
 
   "num_nodes": 50,
   "num_neighbors": 20,

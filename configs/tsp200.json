@@ -1,10 +1,10 @@
 {
-  "expt_name": "default",
-  "gpu_id": "0,1,2,3",
+  "expt_name": "tsp200",
+  "gpu_id": "0,1",
 
   "train_filepath": "./data/tsp200_train_concorde.txt",
-  "val_filepath": "./data/tsp200_val_concorde.txt",
-  "test_filepath": "./data/tsp200_test_concorde.txt",
+  "val_filepath": "./data/tsp200_box_constraint_240710.txt",
+  "test_filepath": "./data/tsp200_box_constraint_240710.txt",
 
   "num_nodes": 200,
   "num_neighbors": 20,
@@ -22,7 +22,7 @@
   "mlp_layers": 3,
   "aggregation": "mean",
 
-  "max_epochs": 50,
+  "max_epochs": 100,
   "val_every": 5,
   "test_every": 100,
 

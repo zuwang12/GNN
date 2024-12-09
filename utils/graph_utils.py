@@ -61,13 +61,26 @@ def mean_tour_len_edges(x_edges_values, y_pred_edges):
     Returns:
         mean_tour_len: Mean tour length over batch
     """
-    y = F.softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
-    y = y.argmax(dim=3)  # B x V x V
-    # Divide by 2 because edges_values is symmetric
-    tour_lens = (y.float() * x_edges_values.float()).sum(dim=1).sum(dim=1) / 2
-    mean_tour_len = tour_lens.sum().to(dtype=torch.float).item() / tour_lens.numel()
-    return mean_tour_len
+    # y = F.softmax(y_pred_edges, dim=3)  # B x V x V x voc_edges
+    # y = y.argmax(dim=3)  # B x V x V
+    # # Divide by 2 because edges_values is symmetric
+    # tour_lens = (y.float() * x_edges_values.float()).sum(dim=1).sum(dim=1) / 2
+    # mean_tour_len = tour_lens.sum().to(dtype=torch.float).item() / tour_lens.numel()
+    # return mean_tour_len
+    if x_edges_values.device != y_pred_edges.device:
+        y_pred_edges = y_pred_edges.to(x_edges_values.device)
 
+    # Softmax to get probabilities and argmax to get predicted edges
+    y = F.softmax(y_pred_edges, dim=3)  # Apply softmax along the last dimension (voc_edges)
+    y = y.argmax(dim=3)  # Choose the most probable edge
+
+    # Calculate the tour lengths, sum over nodes twice to get total tour length for each example in the batch
+    tour_lens = (y.float() * x_edges_values.float()).sum(dim=1).sum(dim=1) / 2  # Divide by 2 to account for symmetric matrix
+
+    # Calculate the mean of these tour lengths over all examples in the batch
+    mean_tour_len = tour_lens.sum().to(dtype=torch.float).item() / tour_lens.numel()
+
+    return mean_tour_len
 
 def mean_tour_len_nodes(x_edges_values, bs_nodes):
     """
